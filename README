@@ -1,0 +1,143 @@
+/* Copyright Marius-Tudor Zaharia 313CAa 2022-2023 */
+/* Tema 1: Virtual Memory Allocator */
+
+*General
+	In main am citit input-ul introdus de utilizator cu ajutorul functiei
+fgets(), dupa care am utilizat strtok pentru a determina comanda. Inainte de
+asta, am facut o copie input-ului, pentru a avea la dispozitie in functiile de
+parsare intregul sir de caractere. Astfel, am putut verifica in permanenta atat
+validitatea comenzii introduse, cat si ca numarul de paramteri introdusi sa fie
+in concordanta cu cerinta, altfel comanda fiind considerata invalida. Mi s-a
+parut mai "ca la carte" sa fac asa, decat sa citesc cu scanf, desi a fost mult
+mai dificil, caci, din moment ce listele se cer a fi generice, si inputul ar
+trebui sa fie verificat, chiar daca in teste nu apar astfel de cazuri.
+	Am adaugat la structura arena_t campurile free_space, block_number si
+miniblock_number, pentru a ma ajuta sa fac partile respective din PMAP in timp
+constant, O(1).
+
+*Functiile pentru listele dublu-inlantuite
+	Am implementat functiile pentru doubly linked list pe baza scheletului de
+laborator, insa le-am facut astfel incat sa fie necirculare, spre deosebire
+de laborator. Implementarea este una generica, am folosit aceleasi functii
+si pentru blocuri, si pentru miniblocuri. Totusi, a fost nevoie de cateva
+functii noi, pentru cazuri ceva mai particulare, care sa economiseasca
+parcurgeri ale listelor, precum miniblock_list_free, destroy_block_from_list
+si free_miniblock, ale caror functionalitati sunt descrise in comentarii.
+
+*Functiile de parsare
+	Toate aceste functii sunt asemanatoare, rolul lor este sa ma asigure ca
+input-ul este unul valid pentru o anumita comanda, de aceea nu puteau fi ge-
+neralizate intr-o singura functie. Acesta este flow-ul programului pentru
+fiecare comanda in implementarea mea, verificare prin functie de parsare,
+apoi functie care executa efectiv comanda dorita.
+
+
+***Functiile pentru executarea comenzilor***
+
+*ALLOC_ARENA
+	Aici totul este clar, doar aloc structura si initializez campurile ei.
+
+*DEALLOC_ARENA
+	Asemanator, nimic complicat, parcurg lista de blocuri si pentru fiecare
+bloc eliberez lista de miniblocuri, eliberand si rw_buffer la fiecare, daca
+este cazul, dupa care eliberez lista de blocuri si structura in sine.
+
+*ALLOC_BLOCK
+	Incep prin a verifica validitatea adresei unde ar trebui alocat noul bloc,
+adica sa nu fie o zona deja alocata sau care sa iasa din arena. Apoi, folosesc
+functia get_position pentru a determina pozitia in lista de blocuri unde ar
+trebui inserat noul miniblock (sau chiar block, daca nu exista adiacenta).
+Pentru a verifica adiacenta, am folosit ca parametri doi pointeri, left si
+right, care prin dereferentiere ne dau existenta unui bloc adiacent la stanga
+sau la dreapta. Astfel, evit sa fac parcurgeri suplimentare si functia devine
+mai eficienta. Apoi, tratez cazurile in care nu am deloc adiacenta, in care am
+adiacenta doar la stanga sau doar la dreapta si in care am adiacenta si la
+stanga, si la dreapta. Cand nu am adiacenta, folosesc doar functiile de create
+si de add de la liste. Cand am adiacenta doar intr-o parte, lipesc noul
+minibloc la inceputul sau la sfarsitul blocului cu care este adiacent.
+Cand am adiacenta dubla, lipesc miniblocul la finalul blocului din stanga, si
+folosesc copy_block pentru a copia toate miniblocurile blocului din dreapta in
+blocul din stanga, dupa care eliberez blocul din dreapta.
+
+*FREE_BLOCK
+	Intai verific ca adresa sa fie una valida, asemanator cu operatia
+precedenta si determin blocul in care se afla acea adresa. Dupa aceea, parcurg
+lista sa de miniblocuri si verific daca miniblocul de eliberat este unicul sau
+minibloc, caz in care eliberez tot blocul. Mai este si cazul in care se afla
+la mijlocul unui bloc, caz in care creez un nou bloc in care il copiez pe cel
+curent. Eliberez de la inceputul lui toate miniblocurile pana la miniblocul de
+eliberat inclusiv, dupa care il adaug in lista de blocuri la dreapta celui
+curent. Scot miniblocul dorit din blocul curent si il eliberez si fac la fel
+cu toate miniblocurile de dupa el. Ultimul caz ramas este cel in care
+miniblocul de eliberat este la inceput sau la final de bloc, situatie in care
+il scot din lista de miniblocuri si il eliberez.
+
+*WRITE
+	In primul rand, eu citesc inputul cu fgets() in main. Astfel, sunt nevoit
+sa vad daca dupa WRITE <address> <size> mai am input pe acea linie care trebuie
+considerat drept informatie de scris. Functia get_write_params() face acest
+lucru si, in plus, citeste de la stdin input linie cu linie pana cand ating
+dimensiunea size. Dupa aceea, vad daca adresa este una valida pentru a scrie
+si determin blocul in care trebuie sa scriu. Apoi, parcurg lista de miniblocuri
+a blocului respectiv, pana cand gasesc adresa de la care scriu. Verific
+permisiunile de scriere pentru fiecare minibloc in care urmeaza sa scriu. Apoi,
+incep efectiv sa scriu de la adresa respectiva, tinand cont sa aloc memorie
+pentru rw_buffer-ul fiecarui minibloc in care trebuie sa scriu. Am in vedere
+in permanenta numarul de caractere pe care mai trebuie sa le scriu si spatiul
+pe care il mai am la dispozitie in fiecare minibloc, dar si in blocul mare.
+
+*READ
+	Operatia inversa de la WRITE. Fac aproape exact aceiasi pasi ca la WRITE,
+doar ca in loc sa aloc memorie pentru rw_buffer, doar parcurg miniblocurile
+si am grija sa citesc doar din zone de memorie alocate deja. Parcurgerea este
+foarte similara cu cea de la WRITE.
+
+*PMAP
+	Afisez datele necesare in formatul cerut (hexa), afisez si permisiunile
+cu o functie separata.
+
+*MPROTECT
+	Parsez inputul primit cu strtok() si determin noile permisiuni dorite,
+dupa care parcurg lista de miniblocuri pana gasesc miniblocul de la adresa la
+care trebuie schimbate permisiunile. Daca nu gasesc miniblocul, afisez mesajul
+cerut.
+
+
+***Alte comentarii***
+
+	Daca in fucntia get_write_params(), la linia 817, adaug in if conditia
+!token, adica if (index < size && !token), nu mai iau seg fault la testele
+38, 40 si 41, ci primesc punctajul intreg pe ele. Totusi, facand asta,
+nu mai primesc punctajul la alte doua teste mai mici, ramanand cu un punctaj
+de 94. Nu am lasat acea implementare, ci pe aceasta de 92, deoarece nu inteleg
+acel comportament al programului, logic mi se pare sa pun mereu \n dupa prima
+linie daca inca nu am adaugat <size> caractere in buffer. Cert este ca si acum,
+output-ul pe toate testele care dau seg fault este identic cu cel din ref pana
+in punctul in care apare eroarea. Nu stiu cum sa localizez exact momentul in
+care apare seg fault-ul, sunt teste mari, si mi se opreste output-ul in
+mijlocul unui PMAP. Probabil greseala este una mica, dar nu am reusit sa imi
+dau seama care este cazul care "strica treaba", oricat de mult m-am uitat.
+Probabil este ceva in get_write_params(), avand in vedere ca mici modificari
+acolo au consecinte mari. Cred ca daca faceam cu scanf aici ar fi fost mult
+mai usor decat cu fgets(), dar daca am folosit fgets() pentru a citi fiecare
+comanda pentru a putea verifica validitatea, nu avea sens sa mai schimb. Si mi
+se pare ca am tratat ok input-ul si aici, nu stiu ce are.
+
+
+***Feedback***
+	Tema a fost interesanta ca si concept. Mi s-a parut dificila, in sensul in
+care era greu de inteles ce trebuia sa facem mai exact. Ca operatii, mi s-a
+parut greu la inceput la ALLOC_BLOCK, dar probabil READ si WRITE erau cele mai
+complexe. Bonusul, cumva paradoxal, a fost cel mai usor. Ca downside, nu mi se
+pare deloc ok faptul ca s-a modificat checker-ul de multe ori. Inteleg o
+modificare sau doua, dar au fost prea multe si prea dese. As sugera sa se
+testeze mai serios si mai riguros inainte de publicare. De asemenea, enuntul
+nu a fost suficient de clar formulat. Multe situatii particulare au fost
+explicate in forum, ori, in opinia mea, ele trebuiau sa fie de la inceput in
+enunt, chiar daca iesea mai lung. Poate ar fi fost utile 2 sau 3 exemple, in
+loc de unul singur.
+
+
+***Resurse***
+	Fisierul utils.h in care este macro-ul DIE l-am luat de pe OCW de la
+laratorul 1, am pus copyright si link la inceputul lui.
